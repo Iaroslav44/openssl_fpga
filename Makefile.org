@@ -356,6 +356,9 @@ do_$(SHLIB_TARGET):
 		if [ "$$i" = "ssl" -a -n "$(LIBKRB5)" ]; then \
 			libs="$(LIBKRB5) $$libs"; \
 		fi; \
+        if [ "$$i" = "crypto" ]; then \
+            libs="-L$(OPENSSL_DPDK)/build -lopenssl_dpdk -L$(RTE_SDK)/build/lib -ldpdk -lrte_eal -lrte_ethdev $$libs"; \
+        fi; \
 		$(CLEARENV) && $(MAKE) -f Makefile.shared -e $(BUILDENV) \
 			LIBNAME=$$i LIBVERSION=$(SHLIB_MAJOR).$(SHLIB_MINOR) \
 			LIBCOMPATVERSIONS=";$(SHLIB_VERSION_HISTORY)" \

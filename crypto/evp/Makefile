@@ -5,7 +5,8 @@
 DIR=	evp
 TOP=	../..
 CC=	cc
-INCLUDES= -I.. -I$(TOP) -I../../include
+INCLUDES= -I.. -I$(TOP) -I../../include -I$(RTE_SDK)/dpdk/x86_64-native-linuxapp-gcc/include \
+			-I$(OPENSSL_DPDK)
 CFLAG=-g
 MAKEFILE=	Makefile
 AR=		ar r
@@ -43,6 +44,7 @@ LIBOBJ=	encode.o digest.o evp_enc.o evp_key.o evp_acnf.o evp_cnf.o \
 	evp_pkey.o evp_pbe.o p5_crpt.o p5_crpt2.o \
 	e_old.o pmeth_lib.o pmeth_fn.o pmeth_gn.o m_sigver.o \
 	e_aes_cbc_hmac_sha1.o e_aes_cbc_hmac_sha256.o e_rc4_hmac_md5.o
+
 
 SRC= $(LIBSRC)
 
