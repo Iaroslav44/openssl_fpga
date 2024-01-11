@@ -82,6 +82,28 @@
         } \
 } while(0)
 
+
+static void hexdump(FILE *f, const char *title, const unsigned char *s, int l)
+{
+    int n = 0;
+//return;
+    fprintf(f, "%s", title);
+    for (; n < l; ++n) {
+
+        fprintf(f, " %02x", s[n]);
+        if ((n % 16) == 15 || n == l - 1) {
+            int j;
+            for (j = 0; j < 15 - (n % 16); ++j)
+                fprintf(f, "   ");
+            fprintf(f, " | ");
+            for (j = n - (n % 16); j <= n; ++j) {
+            	fprintf(f, "%c", (isprint(s[j])) ? s[j] : '.');
+            }
+            fprintf(f, "\n");
+        }
+    }
+    fsync(f);
+}
 /*-
  * Even though permitted values for TABLE_BITS are 8, 4 and 1, it should
  * never be set to 8. 8 is effectively reserved for testing purposes.
@@ -264,20 +286,6 @@ static void gcm_gmult_8bit(u64 Xi[2], const u128 Htable[256])
 
 #elif   TABLE_BITS==4
 
-static void hexdump(FILE *f, const char *title, const unsigned char *s, int l)
-{
-    int n = 0;
-
-    fprintf(f, "%s", title);
-    for (; n < l; ++n) {
-        if ((n % 16) == 0)
-            fprintf(f, "\n%04x", n);
-        fprintf(f, " %02x", s[n]);
-    }
-    fprintf(f, "\n");
-}
-
-
 static void gcm_init_4bit(u128 Htable[16], u64 H[2])
 {
     u128 V;
@@ -361,6 +369,7 @@ static const size_t rem_4bit[16] = {
     PACK(0xE100), PACK(0xFD20), PACK(0xD940), PACK(0xC560),
     PACK(0x9180), PACK(0x8DA0), PACK(0xA9C0), PACK(0xB5E0)
 };
+
 
 static void gcm_gmult_4bit(u64 Xi[2], const u128 Htable[16])
 {
@@ -1257,17 +1266,18 @@ int CRYPTO_gcm128_decrypt(GCM128_CONTEXT *ctx,
 # endif
 #endif
 
-    printf("CALLED INTO decrypt, len = %zu!\n", len);
-
     mlen += len;
     if (mlen > ((U64(1) << 36) - 32) || (sizeof(len) == 8 && mlen < len))
         return -1;
     ctx->len.u[1] = mlen;
 
-    printf("Input:\n");
-    hexdump(stdout, "In", in, len);
-    hexdump(stdout, "key", key, 16);
-    hexdump(stdout, "Yi", ctx->Yi.c, 16);
+
+    if(len >0)
+    {
+		hexdump(stdout, "In CRYPTO_gcm128_decrypt:\n", in, len);
+		hexdump(stdout, "key", key, 16);
+		hexdump(stdout, "Yi ", ctx->Yi.c, 16);
+    }
 
     if (ctx->ares) {
         /* First call to decrypt finalizes GHASH(AAD) */
@@ -1300,6 +1310,11 @@ int CRYPTO_gcm128_decrypt(GCM128_CONTEXT *ctx,
                     GCM_MUL(ctx, Xi);
                 else {
                     ctx->mres = n;
+                    if(len >0)
+                    {
+						fprintf(stdout, "CRYPTO_gcm128_decrypt [1] n=%i  ", n);
+						hexdump(stdout, "Out\n", out, len);
+                    }
                     return 0;
                 }
             }
@@ -1403,6 +1418,11 @@ int CRYPTO_gcm128_decrypt(GCM128_CONTEXT *ctx,
             }
 
             ctx->mres = n;
+            if(len >0)
+			{
+				fprintf(stdout, "CRYPTO_gcm128_decrypt [2] n=%i  ", n);
+				hexdump(stdout, "Out\n", out, len);
+			}
             return 0;
         } while (0);
     }
@@ -1428,7 +1448,8 @@ int CRYPTO_gcm128_decrypt(GCM128_CONTEXT *ctx,
         if (n == 0)
             GCM_MUL(ctx, Xi);
     }
-
+    fprintf(stdout, "CRYPTO_gcm128_decrypt [3] n=%i  ", n);
+    hexdump(stdout, "Out\n", out, len);
     ctx->mres = n;
     return 0;
 }
@@ -1486,6 +1507,7 @@ int CRYPTO_gcm128_encrypt_ctr32(GCM128_CONTEXT *ctx,
             GCM_MUL(ctx, Xi);
         else {
             ctx->mres = n;
+
             return 0;
         }
     }
@@ -1565,6 +1587,8 @@ int CRYPTO_gcm128_decrypt_ctr32(GCM128_CONTEXT *ctx,
     } is_endian = {
         1
     };
+    int len0 = len;
+    unsigned char *out0=out;
     unsigned int n, ctr;
     size_t i;
     u64 mlen = ctx->len.u[1];
@@ -1577,16 +1601,14 @@ int CRYPTO_gcm128_decrypt_ctr32(GCM128_CONTEXT *ctx,
 # endif
 #endif
 
-    printf("CALLED INTO decrypt CTR32, len = %zu!\n", len);
-
     mlen += len;
     if (mlen > ((U64(1) << 36) - 32) || (sizeof(len) == 8 && mlen < len))
         return -1;
     ctx->len.u[1] = mlen;
 
-    hexdump(stdout, "In", in, len);
-    hexdump(stdout, "key", key, 16);
-    hexdump(stdout, "Yi", ctx->Yi.c, 16);
+    hexdump(stdout, "In CRYPTO_gcm128_decrypt_ctr32:\n", in, len);
+    hexdump(stdout, "key ", key, 16);
+    hexdump(stdout, "Yi  ", ctx->Yi.c, 16);
 
     if (ctx->ares) {
         /* First call to decrypt finalizes GHASH(AAD) */
@@ -1616,6 +1638,7 @@ int CRYPTO_gcm128_decrypt_ctr32(GCM128_CONTEXT *ctx,
             GCM_MUL(ctx, Xi);
         else {
             ctx->mres = n;
+            hexdump(stdout, "Out\n", out0, len0);
             return 0;
         }
     }
@@ -1686,6 +1709,7 @@ int CRYPTO_gcm128_decrypt_ctr32(GCM128_CONTEXT *ctx,
         }
     }
 
+    hexdump(stdout, "Out\n",  out0, len0);
     ctx->mres = n;
     return 0;
 }

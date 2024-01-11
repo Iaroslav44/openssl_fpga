@@ -111,10 +111,11 @@ TAGS
 /out32dll
 /out32dll.dbg
 /inc32
-/MINFO
 ms/bcb.mak
 ms/libeay32.def
 ms/nt.mak
 ms/ntdll.mak
 ms/ssleay32.def
 ms/version32.rc
+/.cproject
+/.project

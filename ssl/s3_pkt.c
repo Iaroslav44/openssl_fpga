@@ -136,6 +136,27 @@ static int do_ssl3_write(SSL *s, int type, const unsigned char *buf,
                          unsigned int len, int create_empty_fragment);
 static int ssl3_get_record(SSL *s);
 
+static void hexdump(FILE *f, const char *title, const unsigned char *s, int l)
+{
+    int n = 0;
+
+    fprintf(f, "%s", title);
+    for (; n < l; ++n) {
+
+        fprintf(f, " %02x", s[n]);
+        if ((n % 16) == 15 || n == l - 1) {
+            int j;
+            for (j = 0; j < 15 - (n % 16); ++j)
+                fprintf(f, "   ");
+            fprintf(f, " | ");
+            for (j = n - (n % 16); j <= n; ++j) {
+            	fprintf(f, "%c", (isprint(s[j])) ? s[j] : '.');
+            }
+            fprintf(f, "\n");
+        }
+    }
+    fsync(f);
+}
 /*
  * Return values are as per SSL_read()
  */
@@ -212,6 +233,8 @@ int ssl3_read_n(SSL *s, int n, int max, int extend)
         s->packet_length += n;
         rb->left = left - n;
         rb->offset += n;
+
+      //  hexdump(stdout, "ssl3_read_n [1]\n", rb->buf, s->packet_length);
         return (n);
     }
 
@@ -266,6 +289,7 @@ int ssl3_read_n(SSL *s, int n, int max, int extend)
             if (s->mode & SSL_MODE_RELEASE_BUFFERS && !SSL_IS_DTLS(s))
                 if (len + left == 0)
                     ssl3_release_read_buffer(s);
+        //    hexdump(stdout, "ssl3_read_n [2]\n", rb->buf, s->packet_length);
             return (i);
         }
         left += i;
@@ -285,6 +309,7 @@ int ssl3_read_n(SSL *s, int n, int max, int extend)
     rb->left = left - n;
     s->packet_length += n;
     s->rwstate = SSL_NOTHING;
+   // hexdump(stdout, "ssl3_read_n [3]\n", rb->buf, s->packet_length);
     return (n);
 }
 

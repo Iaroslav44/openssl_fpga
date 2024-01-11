@@ -60,8 +60,6 @@
 # include "modes_lcl.h"
 # include <openssl/rand.h>
 
-#include "dpdk_wrapper_funcs.h"
-
 # undef EVP_CIPH_FLAG_FIPS
 # define EVP_CIPH_FLAG_FIPS 0
 
@@ -254,12 +252,33 @@ size_t aesni_gcm_encrypt(const unsigned char *in,
                          size_t len,
                          const void *key, unsigned char ivec[16], u64 *Xi);
 #   define AES_gcm_encrypt aesni_gcm_encrypt
-
 size_t aesni_gcm_decrypt(const unsigned char *in,
                          unsigned char *out,
                          size_t len,
                          const void *key, unsigned char ivec[16], u64 *Xi);
+//#   define AES_gcm_decrypt aesni_gcm_decrypt
 
+static void hexdump(FILE *f, const char *title, const unsigned char *s, int l)
+{
+    int n = 0;
+
+    fprintf(f, "%s", title);
+    for (; n < l; ++n) {
+
+        fprintf(f, " %02x", s[n]);
+        if ((n % 16) == 15 || n == l - 1) {
+            int j;
+            for (j = 0; j < 15 - (n % 16); ++j)
+                fprintf(f, "   ");
+            fprintf(f, " | ");
+            for (j = n - (n % 16); j <= n; ++j) {
+            	fprintf(f, "%c", (isprint(s[j])) ? s[j] : '.');
+            }
+            fprintf(f, "\n");
+        }
+    }
+    fsync(f);
+}/*
 static void hexdump(FILE *f, const char *title, const unsigned char *s, int l)
 {
     int n = 0;
@@ -273,7 +292,11 @@ static void hexdump(FILE *f, const char *title, const unsigned char *s, int l)
     fprintf(f, "\n");
     fsync(f);
 }
+*/
 
+
+
+/*
 static int init = 0;
 const uint16_t PORT_NUMBER = 0;
 
@@ -342,8 +365,25 @@ size_t aesni_gcm_decrypt_wrapper(const unsigned char *in,
 
     return len;
 }
+*/
 
-#   define AES_gcm_decrypt aesni_gcm_decrypt_wrapper
+size_t aesni_gcm_decrypt_wrapper(const unsigned char *in,
+                         unsigned char *out,
+                         size_t len,
+                         const void *key, unsigned char ivec[16], u64 *Xi) {
+	hexdump(stdout, "In aesni_gcm_decrypt:\n", in, len);
+	//hexdump(stdout, "key", key, 16);
+	//hexdump(stdout, "IV ", ivec, 16);
+	size_t ret = aesni_gcm_decrypt(in, out, len, key, ivec, Xi);
+
+	char title[50];
+	unsigned int frame_length = (unsigned int)(out[2] << 8) | out[3];
+	sprintf(title, "Out len=%i WSlen = %i ret = %i\n", len,frame_length, ret);
+
+	hexdump(stdout, title, out, len);
+    return ret;
+}
+#define AES_gcm_decrypt aesni_gcm_decrypt_wrapper
 void gcm_ghash_avx(u64 Xi[2], const u128 Htable[16], const u8 *in,
                    size_t len);
 #   define AES_GCM_ASM(gctx)       (gctx->ctr==aesni_ctr32_encrypt_blocks && \
@@ -1437,9 +1477,7 @@ static int aes_gcm_init_key(EVP_CIPHER_CTX *ctx, const unsigned char *key,
  * encrypt payload and write the tag. On verify retrieve IV, decrypt payload
  * and verify tag.
  */
-
 static int data_item_idx = 0;
-
 static int aes_gcm_tls_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
                               const unsigned char *in, size_t len)
 {
@@ -1449,7 +1487,6 @@ static int aes_gcm_tls_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
     if (out != in
         || len < (EVP_GCM_TLS_EXPLICIT_IV_LEN + EVP_GCM_TLS_TAG_LEN))
         return -1;
-
     /*
      * Set IV from start of buffer or generate IV and write to start of
      * buffer.
@@ -1480,6 +1517,9 @@ static int aes_gcm_tls_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
                 gctx->gcm.len.u[1] += bulk;
             }
 # endif
+
+
+
             if (CRYPTO_gcm128_encrypt_ctr32(&gctx->gcm,
                                             in + bulk,
                                             out + bulk,
@@ -1511,20 +1551,23 @@ static int aes_gcm_tls_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
         if (gctx->ctr) {
             size_t bulk = 0;
 # if defined(AES_GCM_ASM)
+         //   if (len >= 16 && AES_GCM_ASM(gctx)) {
                 if (CRYPTO_gcm128_decrypt(&gctx->gcm, NULL, NULL, 0))
                     return -1;
 
-                bulk = AES_gcm_decrypt(in, out, len,
-                                       gctx->gcm.key,
-                                       gctx->gcm.Yi.c, gctx->gcm.Xi.u);
+                bulk = 0;//AES_gcm_decrypt(in, out, len,
+                           //            gctx->gcm.key,
+                             //          gctx->gcm.Yi.c, gctx->gcm.Xi.u);
                 gctx->gcm.len.u[1] += bulk;
+       //     }
 # endif
+
+
             if (CRYPTO_gcm128_decrypt_ctr32(&gctx->gcm,
                                             in + bulk,
                                             out + bulk,
                                             len - bulk, gctx->ctr))
                 goto err;
-            hexdump(stdout, "Out", out, len);
         } else {
             size_t bulk = 0;
 # if defined(AES_GCM_ASM2)
@@ -1532,18 +1575,29 @@ static int aes_gcm_tls_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
                 if (CRYPTO_gcm128_decrypt(&gctx->gcm, NULL, NULL, 0))
                     return -1;
 
-                bulk = AES_gcm_decrypt(in, out, len,
-                                       gctx->gcm.key,
-                                       gctx->gcm.Yi.c, gctx->gcm.Xi.u);
+                bulk = 0;//AES_gcm_decrypt(in, out, len,
+                           //            gctx->gcm.key,
+                             //          gctx->gcm.Yi.c, gctx->gcm.Xi.u);
                 gctx->gcm.len.u[1] += bulk;
             }
 # endif
-            if (CRYPTO_gcm128_decrypt(&gctx->gcm,
-                                      in + bulk, out + bulk, len - bulk))
-                goto err;
+
+
+
+		   if (CRYPTO_gcm128_decrypt(&gctx->gcm,
+											  in + bulk, out + bulk, len - bulk))
+						goto err;
+
+
+
         }
         /* Retrieve tag */
         CRYPTO_gcm128_tag(&gctx->gcm, ctx->buf, EVP_GCM_TLS_TAG_LEN);
+        /* If tag mismatch wipe buffer */
+    //    if (CRYPTO_memcmp(ctx->buf, in + len, EVP_GCM_TLS_TAG_LEN)) {
+      //      OPENSSL_cleanse(out, len);
+        //    goto err;
+        //}
         rv = len;
     }
 
@@ -1561,16 +1615,14 @@ static int aes_gcm_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
     if (!gctx->key_set)
         return -1;
 
-    printf("\nData Item #%i:\n", data_item_idx);
-    data_item_idx++;
-
     if (gctx->tls_aad_len >= 0)
         return aes_gcm_tls_cipher(ctx, out, in, len);
 
-    printf("No AAD path\n");
-
     if (!gctx->iv_set)
         return -1;
+
+    data_item_idx++;
+
     if (in) {
         if (out == NULL) {
             if (CRYPTO_gcm128_aad(&gctx->gcm, in, len))
@@ -1620,7 +1672,6 @@ static int aes_gcm_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
                     return -1;
             }
         } else {
-            /* Decrypt */
             if (gctx->ctr) {
                 size_t bulk = 0;
 # if defined(AES_GCM_ASM)
@@ -1643,7 +1694,6 @@ static int aes_gcm_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
                                                 out + bulk,
                                                 len - bulk, gctx->ctr))
                     return -1;
-                hexdump(stdout, "Out", out, len);
             } else {
                 size_t bulk = 0;
 # if defined(AES_GCM_ASM2)
@@ -1671,6 +1721,8 @@ static int aes_gcm_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
         if (!ctx->encrypt) {
             if (gctx->taglen < 0)
                 return -1;
+          //  if (CRYPTO_gcm128_finish(&gctx->gcm, ctx->buf, gctx->taglen) != 0)
+            //    return -1;
             CRYPTO_gcm128_finish(&gctx->gcm, ctx->buf, gctx->taglen);
             gctx->iv_set = 0;
             return 0;
